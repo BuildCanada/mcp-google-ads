@@ -6,8 +6,8 @@ stdio-only; the fork adds a `http` cargo feature (`src/http.rs`) that serves
 streamable HTTP at `/mcp` behind a bearer token, plus `/healthz`.
 
 ```
-https://google-ads-mcp.canadasbuilding.com/mcp      Authorization: Bearer <MCP_BEARER_TOKEN>
-https://google-ads-mcp.canadasbuilding.com/healthz  open
+https://google-ads-mcp.svc.buildcanada.com/mcp      Authorization: Bearer <MCP_BEARER_TOKEN>
+https://google-ads-mcp.svc.buildcanada.com/healthz  open
 ```
 
 ## Files
@@ -33,19 +33,21 @@ https://google-ads-mcp.canadasbuilding.com/healthz  open
      `{"type":"authorized_user","client_id":"…","client_secret":"…","refresh_token":"…"}`
 3. `DOKPLOY_API_KEY=… ./deploy/dokploy/dokploy.sh all`
 
-`dokploy.sh` creates the project "Google Ads MCP" if needed, the application
-`google-ads-mcp` on the Dokploy server at `66.70.179.6` (where the other apps
-run), points it at `https://github.com/BuildCanada/mcp-google-ads.git` branch
-`main` with this Dockerfile, adds the Let's Encrypt domain, saves the env and
-triggers a build. `*.canadasbuilding.com` already resolves to that server, so
-no DNS change is needed.
+`dokploy.sh` creates the project "Google Ads MCP" if needed and the
+application `google-ads-mcp` on the Dokploy host, points it at
+`BuildCanada/mcp-google-ads@main` through the org's Dokploy GitHub app with
+this Dockerfile, adds the Let's Encrypt domain, saves the env and triggers a
+build. The hostname follows the `*.svc.buildcanada.com` convention of the
+other Build Canada services: a proxied CNAME `google-ads-mcp.svc` →
+`nelson.canadasbuilding.com` in the buildcanada.com Cloudflare zone, TLS
+terminated by Cloudflare (Dokploy domain certificateType `none`, like
+`www.buildcanada.com`).
 
 ## Redeploying
 
-Push to `main` on the fork, then `DOKPLOY_API_KEY=… ./deploy/dokploy/dokploy.sh deploy`
-(or press Deploy in the Dokploy UI). Auto-deploy on push is not wired because
-the app uses a public git URL rather than the GitHub app; switch the source to
-GitHub in the UI if that is wanted.
+Pushing to `main` on the fork auto-deploys through the GitHub app webhook.
+To force a rebuild: `DOKPLOY_API_KEY=… ./deploy/dokploy/dokploy.sh deploy`
+(or press Deploy in the Dokploy UI).
 
 Changing a secret: edit `.env.production`, run `dokploy.sh env`, then `dokploy.sh deploy`.
 
@@ -65,6 +67,6 @@ curl -s -X POST localhost:8080/mcp -H 'Authorization: Bearer dev' \
 ## Executor
 
 Register as a remote MCP integration: endpoint
-`https://google-ads-mcp.canadasbuilding.com/mcp`, transport streamable-http,
+`https://google-ads-mcp.svc.buildcanada.com/mcp`, transport streamable-http,
 auth method "header" with header `Authorization` and prefix `Bearer `. Create
 one org-level connection holding `MCP_BEARER_TOKEN`.

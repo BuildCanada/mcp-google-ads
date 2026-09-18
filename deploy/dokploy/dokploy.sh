@@ -9,8 +9,9 @@
 #   DOKPLOY_API_KEY     required (Dokploy → Settings → Profile → API/CLI)
 #   DOKPLOY_PROJECT     project name to create the app in (default: "Google Ads MCP")
 #   DOKPLOY_ENVIRONMENT environment name inside the project (default: production)
-#   DOKPLOY_SERVER_IP   pick the Dokploy server whose IP matches (default: 66.70.179.6)
-#   APP_HOST            public hostname (default: google-ads-mcp.canadasbuilding.com)
+#   DOKPLOY_SERVER_IP   remote Dokploy server to place the app on, by IP (default: 66.70.179.6; omitted when none registered)
+#   APP_HOST            public hostname (default: google-ads-mcp.svc.buildcanada.com; *.nelson.canadasbuilding.com is a wildcard CNAME)
+#   GITHUB_OWNER        GitHub org whose Dokploy GitHub-app provider to use (default: BuildCanada); falls back to a public git URL when none
 #   ENV_FILE            path to a KEY=VALUE file for `env` (default: deploy/dokploy/.env.production)
 set -euo pipefail
 
@@ -18,9 +19,11 @@ DOKPLOY_URL="${DOKPLOY_URL:-https://nelson.canadasbuilding.com}"
 DOKPLOY_PROJECT="${DOKPLOY_PROJECT:-Google Ads MCP}"
 DOKPLOY_ENVIRONMENT="${DOKPLOY_ENVIRONMENT:-production}"
 DOKPLOY_SERVER_IP="${DOKPLOY_SERVER_IP:-66.70.179.6}"
-APP_HOST="${APP_HOST:-google-ads-mcp.canadasbuilding.com}"
+APP_HOST="${APP_HOST:-google-ads-mcp.svc.buildcanada.com}"
 APP_NAME="google-ads-mcp"
-REPO_URL="https://github.com/BuildCanada/mcp-google-ads.git"
+GITHUB_OWNER="${GITHUB_OWNER:-BuildCanada}"
+REPO_NAME="mcp-google-ads"
+REPO_URL="https://github.com/$GITHUB_OWNER/$REPO_NAME.git"
 ENV_FILE="${ENV_FILE:-$(dirname "$0")/.env.production}"
 : "${DOKPLOY_API_KEY:?set DOKPLOY_API_KEY}"
 
@@ -51,27 +54,41 @@ cmd_create() {
   env_id="$(jq -r --arg p "$project_id" --arg e "$DOKPLOY_ENVIRONMENT" \
     '.[] | select(.projectId==$p) | .environments[] | select(.name==$e) | .environmentId' <<<"$projects" | head -1)"
   [ -n "$env_id" ] || { echo "no environment '$DOKPLOY_ENVIRONMENT' in project"; exit 1; }
-  server_id="$(api GET server.all | jq -r --arg ip "$DOKPLOY_SERVER_IP" '.[] | select(.ipAddress==$ip) | .serverId' | head -1)"
-  [ -n "$server_id" ] || { echo "no Dokploy server with IP $DOKPLOY_SERVER_IP"; api GET server.all | jq -r '.[] | "\(.name) \(.ipAddress) \(.serverId)"'; exit 1; }
+  # Remote Dokploy servers are optional; with none registered the app runs on
+  # the Dokploy host itself and serverId is omitted.
+  server_id="$(api GET server.all | jq -r --arg ip "$DOKPLOY_SERVER_IP" '.[]? | select(.ipAddress==$ip) | .serverId' | head -1)"
 
   app_id="$(find_app_id)"
   if [ -z "$app_id" ]; then
     echo "Creating application $APP_NAME"
     app_id="$(api POST application.create "$(jq -nc --arg n "$APP_NAME" --arg e "$env_id" --arg s "$server_id" \
-      '{name:$n,appName:$n,description:"FGRibreau/mcp-google-ads over streamable HTTP",environmentId:$e,serverId:$s}')" | jq -r '.applicationId')"
+      '{name:$n,appName:$n,description:"FGRibreau/mcp-google-ads over streamable HTTP",environmentId:$e} + (if $s=="" then {} else {serverId:$s} end)')" | jq -r '.applicationId')"
   else
     echo "Application exists: $app_id"
   fi
 
-  api POST application.saveGitProvider "$(jq -nc --arg a "$app_id" --arg u "$REPO_URL" \
-    '{applicationId:$a,customGitUrl:$u,customGitBranch:"main",customGitBuildPath:"/",enableSubmodules:false}')" >/dev/null
+  # Prefer the org's GitHub-app provider (webhook auto-deploy on push); fall
+  # back to a plain public git URL when the app is not installed.
+  local github_id
+  github_id="$(api GET github.githubProviders | jq -r --arg o "$GITHUB_OWNER" '.[]? | select(.githubId!=null) | .githubId' | head -1)"
+  if [ -n "$github_id" ]; then
+    echo "Source: GitHub app provider $github_id ($GITHUB_OWNER/$REPO_NAME@main)"
+    api POST application.saveGithubProvider "$(jq -nc --arg a "$app_id" --arg g "$github_id" --arg o "$GITHUB_OWNER" --arg r "$REPO_NAME" \
+      '{applicationId:$a,githubId:$g,owner:$o,repository:$r,branch:"main",buildPath:"/",triggerType:"push",enableSubmodules:false}')" >/dev/null
+  else
+    echo "Source: public git $REPO_URL@main"
+    api POST application.saveGitProvider "$(jq -nc --arg a "$app_id" --arg u "$REPO_URL" \
+      '{applicationId:$a,customGitUrl:$u,customGitBranch:"main",customGitBuildPath:"/",enableSubmodules:false}')" >/dev/null
+  fi
   api POST application.saveBuildType "$(jq -nc --arg a "$app_id" \
     '{applicationId:$a,buildType:"dockerfile",dockerfile:"deploy/dokploy/Dockerfile",dockerContextPath:".",dockerBuildStage:"",herokuVersion:"",railpackVersion:""}')" >/dev/null
 
   if ! api GET "application.one?applicationId=$app_id" | jq -e --arg h "$APP_HOST" '.domains[]? | select(.host==$h)' >/dev/null; then
     echo "Adding domain $APP_HOST"
     api POST domain.create "$(jq -nc --arg a "$app_id" --arg h "$APP_HOST" \
-      '{applicationId:$a,host:$h,port:8080,https:true,certificateType:"letsencrypt",domainType:"application",path:"/"}')" >/dev/null
+      '{applicationId:$a,host:$h,port:8080,https:true,certificateType:"none",domainType:"application",path:"/"}')" >/dev/null
+    # certificateType none: Cloudflare (proxied record) terminates TLS at the
+    # edge, the same as www.buildcanada.com on this Dokploy.
   fi
   echo "applicationId=$app_id"
 }
