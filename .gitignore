@@ -4,3 +4,6 @@ credentials.json
 .envrc
 .claude
 dogfood-output/
+
+# Dokploy env with real secrets
+deploy/dokploy/.env.production

@@ -30,6 +30,13 @@ chrono = { version = "0.4", features = ["serde"] }
 thiserror = "2"
 uuid = { version = "1", features = ["v4"] }
 dirs = "6"
+axum = { version = "0.8", optional = true }
+
+[features]
+default = []
+# Streamable HTTP transport with bearer-token auth (`MCP_TRANSPORT=http`).
+# Off by default so the stdio build stays identical to upstream.
+http = ["dep:axum", "rmcp/transport-streamable-http-server"]
 
 [dev-dependencies]
 wiremock = "0.6"
