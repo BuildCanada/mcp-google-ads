@@ -26,11 +26,19 @@ https://google-ads-mcp.svc.buildcanada.com/healthz  open
    - `MCP_BEARER_TOKEN`: `openssl rand -hex 32`. Store in 1Password (production-secrets) as
      `GOOGLE_ADS_MCP_BEARER_TOKEN`; the same value goes into the Executor connection.
    - `GOOGLE_ADS_DEVELOPER_TOKEN`: Google Ads → manager account 194-692-0796 → Tools & Settings → API Center.
-   - `GOOGLE_ADS_CUSTOMER_ID`: the client account the tools should default to.
-   - `GOOGLE_ADS_CREDENTIALS_JSON`: run `../../scripts/generate_token.sh <oauth-client.json>` with a
-     *Desktop app* OAuth client from Google Cloud (Google Ads API enabled), then merge the client id,
-     client secret and refresh token into one line:
-     `{"type":"authorized_user","client_id":"…","client_secret":"…","refresh_token":"…"}`
+   - `GOOGLE_ADS_CUSTOMER_ID`: the client account the tools should default to (241-527-7160, "Build Canada's Prosperity").
+   - `GOOGLE_ADS_CREDENTIALS_JSON`: one line of
+     `{"type":"authorized_user","client_id":"…","client_secret":"…","refresh_token":"…"}`.
+     The OAuth client is the *Desktop app* client `google-ads-mcp` in the Google Cloud project
+     **aurora** (`voltaic-tooling-497620-g7`), the same project as the Workspace MCP client; its JSON is
+     on Brendan's machine at `~/.mcp-google-ads/credentials.json`. To mint a new refresh token run
+     `../../scripts/generate_token.sh ~/.mcp-google-ads/credentials.json`, consent as
+     brendan@buildcanada.com (the consent screen is internal to the Workspace), then merge the client id,
+     secret and refresh token into the line above.
+   - **Access level lives on the Cloud project, not the token.** Google Ads API access is now managed in
+     Cloud Console → Google Ads API → Access levels. `aurora` holds **Explorer** access (production
+     accounts, 2,880 operations/day); a project still at Test gets
+     `CLOUD_PROJECT_NOT_APPROVED_FOR_PRODUCTION`. Upgrading to Basic requires Brand Verification.
 3. `DOKPLOY_API_KEY=… ./deploy/dokploy/dokploy.sh all`
 
 `dokploy.sh` creates the project "Google Ads MCP" if needed and the
