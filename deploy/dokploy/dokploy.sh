@@ -86,9 +86,11 @@ cmd_create() {
   if ! api GET "application.one?applicationId=$app_id" | jq -e --arg h "$APP_HOST" '.domains[]? | select(.host==$h)' >/dev/null; then
     echo "Adding domain $APP_HOST"
     api POST domain.create "$(jq -nc --arg a "$app_id" --arg h "$APP_HOST" \
-      '{applicationId:$a,host:$h,port:8080,https:true,certificateType:"none",domainType:"application",path:"/"}')" >/dev/null
-    # certificateType none: Cloudflare (proxied record) terminates TLS at the
-    # edge, the same as www.buildcanada.com on this Dokploy.
+      '{applicationId:$a,host:$h,port:8080,https:true,certificateType:"letsencrypt",domainType:"application",path:"/"}')" >/dev/null
+    # Traefik issues the certificate. The DNS record must be DNS-only (not
+    # proxied): Cloudflare's Universal SSL covers *.buildcanada.com but not the
+    # two-level *.svc.buildcanada.com, so a proxied record fails the TLS
+    # handshake at the edge.
   fi
   echo "applicationId=$app_id"
 }

@@ -38,10 +38,13 @@ application `google-ads-mcp` on the Dokploy host, points it at
 `BuildCanada/mcp-google-ads@main` through the org's Dokploy GitHub app with
 this Dockerfile, adds the Let's Encrypt domain, saves the env and triggers a
 build. The hostname follows the `*.svc.buildcanada.com` convention of the
-other Build Canada services: a proxied CNAME `google-ads-mcp.svc` →
-`nelson.canadasbuilding.com` in the buildcanada.com Cloudflare zone, TLS
-terminated by Cloudflare (Dokploy domain certificateType `none`, like
-`www.buildcanada.com`).
+other Build Canada services. DNS is a **DNS-only** CNAME `google-ads-mcp.svc`
+→ `nelson.canadasbuilding.com`, created through Dokploy's Cloudflare DNS
+provider (`prod-cloudflare`, Settings → DNS providers, or the
+`dnsProvider.*` API). It must stay unproxied: Cloudflare Universal SSL covers
+`*.buildcanada.com` but not two-level names, so a proxied record fails the TLS
+handshake at the edge. Traefik issues the Let's Encrypt certificate instead
+(Dokploy domain certificateType `letsencrypt`).
 
 ## Redeploying
 
